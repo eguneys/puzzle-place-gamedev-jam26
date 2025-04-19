@@ -22,9 +22,10 @@ let fg_tiles: FgTile[]
 type Shape = {
     slot: number
     tiles: XYWHZZ[]
-    shape: XYWH[]
+    shape: XYWH
     t_hovering: number
     t_cancel: number
+    t_commit: number
     pos: XYWH
 }
 
@@ -34,6 +35,7 @@ let fg_shapes: Shape[]
 type DragHandler = {
     is_hovering?: XY
     is_down?: XY
+    is_just_down?: XY
     is_up?: XY
     is_double_click?: XY
     update(delta: number): void
@@ -95,6 +97,9 @@ function DragHandler() {
         get is_up() {
             return is_up
         },
+        get is_just_down() {
+            return is_just_down
+        },
         get is_double_click() {
             return is_double_click
         },
@@ -119,26 +124,46 @@ function DragHandler() {
     }
 }
 
+const button_boxes: Record<string, XYWH> = {
+    back: [0, 0, 24, 16],
+    restart: [0, 0, 24, 16],
+}
+
 let drag: DragHandler
 
 let t: number
+
+let t_restart: number
+
+let bg_speed: number
 
 let drag_shape: Shape | undefined
 let drag_decay: XY
 let hover_shape: Shape | undefined
 
 
-let o: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1], [1, 1, -1, -1]]
-let s: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1]]
-let s2: XYWH[] = [[0, 1, 1, -1], [1, 0, -1, 1], [1, 1, -1, -1]]
-let s3: XYWH[] = [[1, 0, -1, 1], [1, 1, -1, -1], [0, 0, 1, 1]]
-
+let o: XYWH = [1, 1, 1, 1]
+let s: XYWH = [1, 1, 1, 0]
+let s2: XYWH = [1, 1, 0, 1]
+let s3: XYWH = [1, 0, 1, 1]
+//let s4: XYWH = [0, 1, 1, 1]
+let l1: XYWH = [0, 0, 1, 1]
 
 
 
 export function _init() {
 
     t = 0
+    bg_speed = 0
+
+    _restart_level()
+
+}
+
+function _restart_level() {
+
+    t_restart = 0
+
     drag_decay = [0, 0]
 
     drag = DragHandler()
@@ -160,15 +185,14 @@ export function _init() {
     }
     fg_tiles.shift()
 
-    push_tile(0, s)
     push_tile(1, s)
     push_tile(2, o)
     push_tile(3, s3)
-    push_tile(4, s3)
-    push_tile(5, s)
+    push_tile(4, s2)
+    push_tile(5, l1)
 }
 
-function push_tile(slot: number, l: XYWH[]) {
+function push_tile(slot: number, l: XYWH) {
 
     let pp = [
         [92, 0], [128, 0],
@@ -179,13 +203,13 @@ function push_tile(slot: number, l: XYWH[]) {
     let pos: XYWH = [pp[slot][0], pp[slot][1], pp[slot][0], pp[slot][1]]
 
     let tiles: XYWHZZ[] = []
-    for (let i = 0; i< l.length; i++) {
-        let x = l[i][0] * 14
-        let y = l[i][1] * 13
 
-        let x2 = x + l[i][2]
-        let y2 = y + l[i][3]
-        tiles.push([x, y, x2, y2, 0, 0])
+    for (let i = 0; i < 2; i++) {
+        for (let j = 0; j < 2; j++) {
+            if (l[i + j * 2] === 1) {
+                tiles.push([i, j, i, j, 0, 0])
+            }
+        }
     }
 
     fg_shapes.push({
@@ -195,14 +219,24 @@ function push_tile(slot: number, l: XYWH[]) {
         shape: l,
         t_hovering: 0,
         t_cancel: 0,
+        t_commit: 0
     })
 }
 
 export function _update(delta: number) {
+    
+    if (t_restart > 0) {
+        t_restart = appr(t_restart, 0, delta)
+        if (t_restart === 0) {
+            _restart_level()
+        }
+
+        bg_speed = 1 + lerp(bg_speed, 200, t_restart / 1000)
+    }
 
     t += delta
 
-    let bg_speed = 1
+    bg_speed = appr(bg_speed, 1, 200 * delta / 1000)
     for (let i = 0; i < nb_bg + 2; i++) {
         for (let j = 0; j < nb_bg; j++) {
             bg_tiles[i * nb_bg + j][0] += bg_speed * delta / 1000
@@ -264,6 +298,10 @@ export function _update(delta: number) {
 
     fg_shapes.forEach(shape => update_shape(shape, delta))
 
+    if (commited_shape) {
+        update_shape(commited_shape, delta)
+    }
+
     fg_tiles.forEach(tile => tile.hover_color = 0)
 
     if (drag_shape) {
@@ -279,15 +317,21 @@ export function _update(delta: number) {
             }
         })
         if (min_fg_tile) {
-            const i = fg_tiles.indexOf(min_fg_tile)
+            const i = fg_tiles.indexOf(min_fg_tile) + 1
 
-            let [x, y] = [i % 5, Math.floor(i / 5)]
+            let [x, y] = [Math.floor(i / 5), i % 5]
 
-            let tiles = shape.shape.map(_ => fg_tiles[x + _[0] + (y + _[1]) * 5])
+            let tiles = shape.shape.map((_, i) => 
+                _ === 1 && 
+            fg_tiles[y + Math.floor(i / 2) + (x + i % 2) * 5 - 1]).filter(Boolean)
             let all_empty = tiles.every(_ => _ && (_.is_filled === false))
 
             if (all_empty) {
-                tiles.forEach(_ => _.hover_color = 1)
+                tiles.forEach(_ => {
+                    if (_) {
+                        _.hover_color = 1
+                    }
+                })
             } else {
                 tiles.forEach(_ => {
                     if (_)
@@ -297,7 +341,17 @@ export function _update(delta: number) {
         }
     }
 
+    if (drag.is_just_down) {
+        if (box_intersect(cursor_box(drag.is_just_down), button_box(button_boxes.restart))) {
+            t_restart = 200
+        }
+    }
+
     drag.update(delta)
+}
+
+function button_box(button: XYWH) {
+    return button
 }
 
 function fg_box(tile: XYWH): XYWH {
@@ -310,6 +364,8 @@ function cancel_drag(shape: Shape) {
     AudioContent.play('drop', false, 0.5)
 }
 
+let commited_shape: Shape | undefined
+
 function commit_drag(shape: Shape) {
     let pp = fg_tiles.filter(_ => _.is_filled === false && _.hover_color === 1)
     if (pp.length !== shape.tiles.length) {
@@ -317,12 +373,28 @@ function commit_drag(shape: Shape) {
     }
     pp.forEach(_ => _.is_filled = true)
     fg_shapes.splice(fg_shapes.indexOf(shape), 1)
+
+    commited_shape = shape
+    commited_shape.t_commit = 200
     drag_decay = [0, 0]
     return true
 }
 
 function update_shape(shape: Shape, delta: number) {
 
+    if (shape.t_commit > 0) {
+
+        shape.t_commit = appr(shape.t_commit, 0, delta)
+        if (shape.t_commit === 0) {
+            shape.t_commit = -100
+        }
+    }
+    if (shape.t_commit < 0) {
+        shape.t_commit = appr(shape.t_commit, 0, delta)
+        if (shape.t_commit === 0) {
+            commited_shape = undefined
+        }
+    }
     shape.t_cancel = appr(shape.t_cancel, 0, delta)
     shape.t_hovering = appr(shape.t_hovering, 0, delta)
 
@@ -338,6 +410,14 @@ function update_shape(shape: Shape, delta: number) {
         shape.pos[2] = lerp(shape.pos[2], shape.pos[0], ease(1 - shape.t_cancel / 200))
         shape.pos[3] = lerp(shape.pos[3], shape.pos[1], ease(1 - shape.t_cancel / 200))
     }
+
+    if (shape.t_commit > 0) {
+        shape.pos[2] = lerp(shape.pos[2], shape.pos[0], ease(1 - shape.t_commit / 200))
+        shape.pos[3] = lerp(shape.pos[3], shape.pos[1], ease(1 - shape.t_commit / 200))
+    }
+
+
+
 }
 
 function ease(t: number): number {
@@ -449,12 +529,15 @@ export function _render(_alpha: number) {
     }
 
 
-
-    c.image(0, 0, 80, 45, 0, 80)
+    c.image(...button_boxes.back, 0, 80)
 
 
     if (drag_shape) {
         render_shape(drag_shape)
+    }
+
+    if (commited_shape) {
+        render_shape(commited_shape)
     }
 
     if (drag.is_hovering) {
@@ -470,19 +553,36 @@ export function _render(_alpha: number) {
 
 }
 
+
+
 function render_shape(shape: Shape) {
+
+    const off_commit: XY[] = [[5, 0], [5, 0], [5, 0], [5, 0]]
+
+
     let tiles = shape.tiles
 
-    for (let i = 0; i < tiles.length; i++) {
-        let [hx, hy] = [shape.pos[2], shape.pos[3]]
-        if (shape.t_hovering > 0) {
-            c.image(hx + tiles[i][4], hy + tiles[i][5], 16, 16, 0, 0)
-            c.image(hx + tiles[i][4], hy + tiles[i][5], 16, 16, ...auto_tile_src(tiles, i))
-        } else {
-            c.image(hx + tiles[i][0], hy + tiles[i][1], 16, 16, 0, 0)
-        }
+    for (let i = 0; i < 2; i++) {
+        for (let j = 0; j < 2; j++) {
+            if (shape.shape[i + j * 2] === 0) {
+                continue
+            }
+            let [ox, oy] = [i * 14, j * 13]
+            let [hx, hy] = [shape.pos[2], shape.pos[3]]
+            hx += ox
+            hy += oy
 
-        //c.rect(...tile_box(tiles[i]), 'red')
+            if (shape.t_commit !== 0) {
+                c.image(hx + tiles[i][0] + off_commit[i + j * 2][0], hy + tiles[i][1] + off_commit[i + j * 2][1], 16, 16, 0, 0)
+            } else if (shape.t_hovering > 0) {
+                c.image(hx + tiles[i][4], hy + tiles[i][5], 16, 16, 0, 0)
+                c.image(hx + tiles[i][4], hy + tiles[i][5], 16, 16, ...auto_tile_src(tiles, i))
+            } else {
+                c.image(hx + tiles[i][0], hy + tiles[i][1], 16, 16, 0, 0)
+            }
+
+            //c.rect(...tile_box(tiles[i]), 'red')
+        }
     }
 }
 
