@@ -2,7 +2,7 @@ import { Loop } from './loop_input'
 import './style.css'
 import { _init, _render, _update } from './ur.ts'
 import { c } from './canvas'
-
+import AudioContent from './audio'
 
 function app(el: HTMLElement) {
 
@@ -11,7 +11,8 @@ function app(el: HTMLElement) {
   Loop(_update, _render)
 
   Promise.all([
-    c.load_sheet()
+    c.load_sheet(),
+    AudioContent.load()
   ]).then(() => {
 
   })

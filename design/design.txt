@@ -1,0 +1,12 @@
+cursor hover drag
+
+piece hover drag
+
+placement valid hover
+placement invalid hover
+
+placement valid drop
+placement invalid drop
+
+
+tween pickup drop valid return invalid 
