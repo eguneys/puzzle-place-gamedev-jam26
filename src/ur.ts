@@ -107,14 +107,17 @@ export function _init() {
     fg_tiles.shift()
 
 
-    let l: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1], [1, 1, -1, -1]]
+    let o: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1], [1, 1, -1, -1]]
+    let l: XYWH[] = [[0, 0, 1, 0], [0, 1, 1, 1], [0, 2, 1, 2]]
+    let s: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1]]
+    let shape_t: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1], [0, -1, 0, 0]]
 
-    push_tile(0, l)
-    push_tile(1, l)
-    push_tile(2, l)
-    push_tile(3, l)
-    push_tile(4, l)
-    push_tile(5, l)
+    push_tile(0, shape_t)
+    push_tile(1, shape_t)
+    push_tile(2, shape_t)
+    push_tile(3, shape_t)
+    push_tile(4, shape_t)
+    push_tile(5, shape_t)
 }
 
 function push_tile(slot: number, l: XYWH[]) {
