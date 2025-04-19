@@ -9,11 +9,20 @@ type XYWHZZ = [number, number, number, number, number, number]
 let nb_bg = 5
 let bg_tiles: XY[]
 
-let fg_tiles: XYWH[]
+type HoverColor = 0 | 1 | 2
+
+type FgTile = {
+    is_filled: boolean
+    hover_color: HoverColor
+    xywh: XYWH
+}
+
+let fg_tiles: FgTile[]
 
 type Shape = {
     slot: number
     tiles: XYWHZZ[]
+    shape: XYWH[]
     t_hovering: number
     t_cancel: number
     pos: XYWH
@@ -25,6 +34,10 @@ let fg_shapes: Shape[]
 type DragHandler = {
     is_hovering?: XY
     is_down?: XY
+    is_up?: XY
+    is_double_click?: XY
+    update(delta: number): void
+    has_moved_after_last_down: boolean
 }
 
 function DragHandler() {
@@ -35,6 +48,12 @@ function DragHandler() {
 
     let is_up: XY | undefined
 
+    let is_just_down: XY | undefined
+
+    let is_double_click: XY | undefined
+    let has_moved_after_last_down = false
+
+    let t_double_click = 0
 
     function scale_e(e: XY): XY {
         return [e[0] * 160, e[1] * 90]
@@ -44,17 +63,22 @@ function DragHandler() {
         on_down(e: XY) {
             e = scale_e(e)
 
+            is_up = undefined
             is_down = e
+            is_just_down = e
+            has_moved_after_last_down = false
         },
         on_up(e: XY) {
             e = scale_e(e)
             is_down = undefined
             is_hovering = undefined
+            is_up = e
         },
         on_move(e: XY) {
             e = scale_e(e)
 
             is_hovering = e
+            has_moved_after_last_down = true
         }
     }
 
@@ -70,6 +94,27 @@ function DragHandler() {
         },
         get is_up() {
             return is_up
+        },
+        get is_double_click() {
+            return is_double_click
+        },
+        get has_moved_after_last_down() {
+            return has_moved_after_last_down
+        },
+        update(delta: number) {
+
+            is_double_click = undefined
+
+            if (is_just_down) {
+                if (t_double_click > 0) {
+                    is_double_click = is_just_down
+                    t_double_click = 0
+                }
+            }
+
+            t_double_click = appr(t_double_click, 0, delta)
+            is_just_down = undefined
+            is_up = undefined
         }
     }
 }
@@ -81,6 +126,15 @@ let t: number
 let drag_shape: Shape | undefined
 let drag_decay: XY
 let hover_shape: Shape | undefined
+
+
+let o: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1], [1, 1, -1, -1]]
+let s: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1]]
+let s2: XYWH[] = [[0, 1, 1, -1], [1, 0, -1, 1], [1, 1, -1, -1]]
+let s3: XYWH[] = [[1, 0, -1, 1], [1, 1, -1, -1], [0, 0, 1, 1]]
+
+
+
 
 export function _init() {
 
@@ -101,23 +155,17 @@ export function _init() {
 
     for (let i = 0; i < 5; i++) {
         for (let j = 0; j < 5; j++) {
-            fg_tiles.push([i * 17, 15 + j * 15, 0, 0])
+            fg_tiles.push({ is_filled: false, hover_color: 0, xywh: [i * 17, 15 + j * 15, 0, 0] })
         }
     }
     fg_tiles.shift()
 
-
-    let o: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1], [1, 1, -1, -1]]
-    let l: XYWH[] = [[0, 0, 1, 0], [0, 1, 1, 1], [0, 2, 1, 2]]
-    let s: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1]]
-    let shape_t: XYWH[] = [[0, 0, 1, 1], [0, 1, 1, -1], [1, 0, -1, 1], [0, -1, 0, 0]]
-
-    push_tile(0, shape_t)
-    push_tile(1, shape_t)
-    push_tile(2, shape_t)
-    push_tile(3, shape_t)
-    push_tile(4, shape_t)
-    push_tile(5, shape_t)
+    push_tile(0, s)
+    push_tile(1, s)
+    push_tile(2, o)
+    push_tile(3, s3)
+    push_tile(4, s3)
+    push_tile(5, s)
 }
 
 function push_tile(slot: number, l: XYWH[]) {
@@ -144,8 +192,9 @@ function push_tile(slot: number, l: XYWH[]) {
         pos,
         slot,
         tiles,
+        shape: l,
         t_hovering: 0,
-        t_cancel: 0
+        t_cancel: 0,
     })
 }
 
@@ -188,6 +237,8 @@ export function _update(delta: number) {
         }
     }
 
+
+
     if (drag.is_down) {
         let { is_down } = drag
 
@@ -213,29 +264,40 @@ export function _update(delta: number) {
 
     fg_shapes.forEach(shape => update_shape(shape, delta))
 
-    fg_tiles.forEach(_ => {
-        if (_[2] === 1) {
-            _[2] = 0
-        }
-    })
+    fg_tiles.forEach(tile => tile.hover_color = 0)
 
     if (drag_shape) {
         const shape = drag_shape
-        drag_shape.tiles.forEach(tile => {
-            let min_fg_tile: XYWH | undefined
-            let min_ratio: number | undefined
-            fg_tiles.forEach((fg_tile) => {
-                let ratio = box_intersect_ratio(tile_box(shape, tile), fg_box(fg_tile)).ratio_b
-                if (fg_tile[2] === 0 && ratio > 0 && (min_ratio === undefined || ratio > min_ratio)) {
-                    min_fg_tile = fg_tile
-                    min_ratio = ratio
-                }
-            })
-            if (min_fg_tile) {
-                min_fg_tile[2] = 1
+        let tile0 = drag_shape.tiles[0]
+        let min_fg_tile: FgTile | undefined
+        let min_ratio: number | undefined
+        fg_tiles.forEach((fg_tile) => {
+            let ratio = box_intersect_ratio(tile_box(shape, tile0), fg_box(fg_tile.xywh)).ratio_b
+            if (ratio > 0 && (min_ratio === undefined || ratio > min_ratio)) {
+                min_fg_tile = fg_tile
+                min_ratio = ratio
             }
         })
+        if (min_fg_tile) {
+            const i = fg_tiles.indexOf(min_fg_tile)
+
+            let [x, y] = [i % 5, Math.floor(i / 5)]
+
+            let tiles = shape.shape.map(_ => fg_tiles[x + _[0] + (y + _[1]) * 5])
+            let all_empty = tiles.every(_ => _ && (_.is_filled === false))
+
+            if (all_empty) {
+                tiles.forEach(_ => _.hover_color = 1)
+            } else {
+                tiles.forEach(_ => {
+                    if (_)
+                        _.hover_color = 2
+                })
+            }
+        }
     }
+
+    drag.update(delta)
 }
 
 function fg_box(tile: XYWH): XYWH {
@@ -249,11 +311,11 @@ function cancel_drag(shape: Shape) {
 }
 
 function commit_drag(shape: Shape) {
-    let pp = fg_tiles.filter(_ => _[2] === 1)
+    let pp = fg_tiles.filter(_ => _.is_filled === false && _.hover_color === 1)
     if (pp.length !== shape.tiles.length) {
         return false
     }
-    pp.forEach(_ => _[2] = 2)
+    pp.forEach(_ => _.is_filled = true)
     fg_shapes.splice(fg_shapes.indexOf(shape), 1)
     drag_decay = [0, 0]
     return true
@@ -351,20 +413,32 @@ export function _render(_alpha: number) {
 
 
     for (let i = 0; i < fg_tiles.length; i++) {
-        if (fg_tiles[i][2] === 2) {
-            c.image(fg_tiles[i][0], fg_tiles[i][1], 24, 16, 56, 48)
-        } else if (fg_tiles[i][2] === 1) {
-            c.image(fg_tiles[i][0], fg_tiles[i][1], 24, 16, 56, 16)
+        let [x, y, w, h] = fg_tiles[i].xywh
+        if (fg_tiles[i].is_filled) {
+            if (fg_tiles[i].hover_color === 2) {
+                c.image(x, y, 24, 16, 56, 32)
+            } else if (fg_tiles[i].hover_color === 1) {
+                c.image(x + w, y + h, 24, 16, 56, 48)
+            } else if (fg_tiles[i].hover_color === 0) {
+                c.image(x + w, y + h, 24, 16, 56, 48)
+            }
+
         } else {
-            c.image(fg_tiles[i][0], fg_tiles[i][1], 24, 16, 56, 0)
+            if (fg_tiles[i].hover_color === 2) {
+                c.image(x, y, 24, 16, 56, 32)
+            } else if (fg_tiles[i].hover_color === 1) {
+                c.image(x + w, y + h, 24, 16, 56, 16)
+            } else if (fg_tiles[i].hover_color === 0) {
+                c.image(x + w, y + h, 24, 16, 56, 0)
+            }
         }
 
         if (false) {
-            c.rect(...fg_box(fg_tiles[i]), 'red')
+            c.rect(...fg_box(fg_tiles[i].xywh), 'red')
         }
 
         if (i % 2 === 0) {
-            c.image(fg_tiles[i][0] + 8, fg_tiles[i][1] + 5, 32, 24, 88, 16)
+            c.image(fg_tiles[i].xywh[0] + 8, fg_tiles[i].xywh[1] + 5, 32, 24, 88, 16)
         }
     }
 
@@ -403,7 +477,6 @@ function render_shape(shape: Shape) {
         let [hx, hy] = [shape.pos[2], shape.pos[3]]
         if (shape.t_hovering > 0) {
             c.image(hx + tiles[i][4], hy + tiles[i][5], 16, 16, 0, 0)
-
             c.image(hx + tiles[i][4], hy + tiles[i][5], 16, 16, ...auto_tile_src(tiles, i))
         } else {
             c.image(hx + tiles[i][0], hy + tiles[i][1], 16, 16, 0, 0)

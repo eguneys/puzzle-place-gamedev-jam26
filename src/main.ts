@@ -4,6 +4,17 @@ import { _init, _render, _update } from './ur.ts'
 import { c } from './canvas'
 import AudioContent from './audio'
 
+
+async function load_font(font_family: string, url: string, props = {
+    style: 'normal',
+    weight: '400'
+}) {
+    const font = new FontFace(font_family, `url(${url})`, props )
+    await font.load()
+    document.fonts.add(font)
+}
+
+
 function app(el: HTMLElement) {
 
   _init()
@@ -12,7 +23,8 @@ function app(el: HTMLElement) {
 
   Promise.all([
     c.load_sheet(),
-    AudioContent.load()
+    AudioContent.load(),
+    load_font('HDLoreFont', '/PTSerif-Regular.ttf')
   ]).then(() => {
 
   })
