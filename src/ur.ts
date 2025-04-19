@@ -4,7 +4,6 @@ import AudioContent from './audio'
 
 type XY = [number, number]
 type XYWH = [number, number, number, number]
-type XYWHZZ = [number, number, number, number, number, number]
 
 let nb_bg = 5
 let bg_tiles: XY[]
@@ -19,17 +18,24 @@ type FgTile = {
 
 let fg_tiles: FgTile[]
 
-type Shape = {
+type DdTile = {
+    shape_pos: XYWH
+    off_pos?: XY
+    pos: XY
+}
+
+type DdShape = {
     slot: number
-    tiles: XYWHZZ[]
-    shape: XYWH
+    dd_tiles: (DdTile | undefined)[]
+    shape: ShapeMesh
     t_hovering: number
     t_cancel: number
     t_commit: number
-    pos: XYWH
 }
 
-let fg_shapes: Shape[]
+type ShapeMesh = XYWH
+
+let dd_shapes: DdShape[]
 
 
 type DragHandler = {
@@ -137,9 +143,9 @@ let t_restart: number
 
 let bg_speed: number
 
-let drag_shape: Shape | undefined
-let drag_decay: XY
-let hover_shape: Shape | undefined
+let drag_shape: DdShape | undefined
+let drag_decay: [XY, XY, XY, XY]
+let hover_shape: DdShape | undefined
 
 
 let o: XYWH = [1, 1, 1, 1]
@@ -147,7 +153,7 @@ let s: XYWH = [1, 1, 1, 0]
 let s2: XYWH = [1, 1, 0, 1]
 let s3: XYWH = [1, 0, 1, 1]
 //let s4: XYWH = [0, 1, 1, 1]
-let l1: XYWH = [0, 0, 1, 1]
+let l1: XYWH = [0, 1, 0, 0]
 
 
 
@@ -164,13 +170,13 @@ function _restart_level() {
 
     t_restart = 0
 
-    drag_decay = [0, 0]
+    drag_decay = [[0, 0], [0, 0], [0, 0], [0, 0]]
 
     drag = DragHandler()
 
     bg_tiles = []
     fg_tiles = []
-    fg_shapes = []
+    dd_shapes = []
 
     for (let i = 0; i < nb_bg + 2; i++) {
         for (let j = 0; j < nb_bg; j++) {
@@ -200,22 +206,26 @@ function push_tile(slot: number, l: XYWH) {
         [92, 60], [128, 60],
         [92, 90], [128, 90],
     ]
-    let pos: XYWH = [pp[slot][0], pp[slot][1], pp[slot][0], pp[slot][1]]
 
-    let tiles: XYWHZZ[] = []
+    let dd_tiles: DdTile[] = []
 
     for (let i = 0; i < 2; i++) {
         for (let j = 0; j < 2; j++) {
             if (l[i + j * 2] === 1) {
-                tiles.push([i, j, i, j, 0, 0])
+                let x = i * 14
+                let y = j * 13
+
+                dd_tiles[i + j * 2] = { 
+                    shape_pos: [pp[slot][0], pp[slot][1], x, y],
+                    pos: [pp[slot][0] + x, pp[slot][1] + y],
+                }
             }
         }
     }
 
-    fg_shapes.push({
-        pos,
+    dd_shapes.push({
+        dd_tiles,
         slot,
-        tiles,
         shape: l,
         t_hovering: 0,
         t_cancel: 0,
@@ -258,11 +268,17 @@ export function _update(delta: number) {
 
             drag_shape.t_hovering = 120
 
-            drag_shape.pos[2] = is_hovering[0] - drag_decay[0]
-            drag_shape.pos[3] = is_hovering[1] - drag_decay[1]
+            drag_shape.dd_tiles.forEach((tile, i) => {
+                if (!tile) {
+                    return
+                }
+                tile.pos = [
+                    is_hovering[0] + drag_decay[i][0],
+                    is_hovering[1] + drag_decay[i][1]]
+            })
 
         } else {
-            let shape = fg_shapes.find(shape => shape.tiles.find(_ => box_intersect(tile_box(shape, _), cursor_box(is_hovering))))
+            let shape = dd_shapes.find(shape => shape.dd_tiles.find(_ => _ && box_intersect(dd_tile_box(_), cursor_box(is_hovering))))
 
             if (shape) {
                 hover_shape = shape
@@ -276,14 +292,32 @@ export function _update(delta: number) {
     if (drag.is_down) {
         let { is_down } = drag
 
-        let shape = fg_shapes.find(shape => shape.tiles.find(_ => box_intersect(tile_box(shape, _), cursor_box(is_down))))
+        let dd_shape
+        let dd_tile
+        
+        for (let shape of dd_shapes) {
+            for (let tile of shape.dd_tiles) {
+                if (!tile) {
+                    continue
+                }
+                if (box_intersect(dd_tile_box(tile), cursor_box(is_down))) {
+                    dd_shape = shape
+                    dd_tile = tile
+                    break
+                }
+            }
+        }
 
-        if (shape && shape !== drag_shape) {
+        if (dd_tile && dd_shape !== drag_shape) {
             if (drag_shape) {
                 cancel_drag(drag_shape)
             }
-            drag_shape = shape
-            drag_decay = [is_down[0] - shape.pos[0], is_down[1] - shape.pos[1]]
+            drag_shape = dd_shape
+            if (drag_shape) {
+                drag_decay = drag_shape.dd_tiles.map<XY>(tile =>
+                    tile ?  [tile.pos[0] - is_down[0], tile.pos[1] - is_down[1]] : [0, 0]) as [XY, XY, XY, XY]
+
+            }
             AudioContent.play('drag', false, 0.5)
         }
     } else {
@@ -296,7 +330,7 @@ export function _update(delta: number) {
         }
     }
 
-    fg_shapes.forEach(shape => update_shape(shape, delta))
+    dd_shapes.forEach(shape => update_shape(shape, delta))
 
     if (commited_shape) {
         update_shape(commited_shape, delta)
@@ -306,11 +340,11 @@ export function _update(delta: number) {
 
     if (drag_shape) {
         const shape = drag_shape
-        let tile0 = drag_shape.tiles[0]
+        let tile0 = drag_shape.dd_tiles.find(_ => !!_)!
         let min_fg_tile: FgTile | undefined
         let min_ratio: number | undefined
         fg_tiles.forEach((fg_tile) => {
-            let ratio = box_intersect_ratio(tile_box(shape, tile0), fg_box(fg_tile.xywh)).ratio_b
+            let ratio = box_intersect_ratio(dd_tile_box(tile0), fg_box(fg_tile.xywh)).ratio_b
             if (ratio > 0 && (min_ratio === undefined || ratio > min_ratio)) {
                 min_fg_tile = fg_tile
                 min_ratio = ratio
@@ -321,10 +355,11 @@ export function _update(delta: number) {
 
             let [x, y] = [Math.floor(i / 5), i % 5]
 
-            let tiles = shape.shape.map((_, i) => 
-                _ === 1 && 
-            fg_tiles[y + Math.floor(i / 2) + (x + i % 2) * 5 - 1]).filter(Boolean)
-            let all_empty = tiles.every(_ => _ && (_.is_filled === false))
+            let off_i = shape.dd_tiles.findIndex(_ => _ !== undefined)
+            let tiles = shape.dd_tiles.map((_, i) =>
+                _ &&
+            fg_tiles[y + Math.floor((i - off_i) / 2) + (x + (i - off_i) % 2) * 5 - 1]).filter(Boolean)
+            let all_empty = tiles.every(_ => !_ || (_.is_filled === false))
 
             if (all_empty) {
                 tiles.forEach(_ => {
@@ -358,29 +393,29 @@ function fg_box(tile: XYWH): XYWH {
     return [tile[0] + 6, tile[1] + 2, 14, 12]
 }
 
-function cancel_drag(shape: Shape) {
+function cancel_drag(shape: DdShape) {
     shape.t_cancel = 200
-    drag_decay = [0, 0]
+    drag_decay = [[0, 0], [0, 0], [0, 0], [0, 0]]
     AudioContent.play('drop', false, 0.5)
 }
 
-let commited_shape: Shape | undefined
+let commited_shape: DdShape | undefined
 
-function commit_drag(shape: Shape) {
+function commit_drag(shape: DdShape) {
     let pp = fg_tiles.filter(_ => _.is_filled === false && _.hover_color === 1)
-    if (pp.length !== shape.tiles.length) {
+    if (pp.length !== shape.dd_tiles.filter(Boolean).length) {
         return false
     }
     pp.forEach(_ => _.is_filled = true)
-    fg_shapes.splice(fg_shapes.indexOf(shape), 1)
+    dd_shapes.splice(dd_shapes.indexOf(shape), 1)
 
     commited_shape = shape
     commited_shape.t_commit = 200
-    drag_decay = [0, 0]
+    drag_decay = [[0, 0], [0, 0], [0, 0], [0, 0]]
     return true
 }
 
-function update_shape(shape: Shape, delta: number) {
+function update_shape(shape: DdShape, delta: number) {
 
     if (shape.t_commit > 0) {
 
@@ -398,25 +433,29 @@ function update_shape(shape: Shape, delta: number) {
     shape.t_cancel = appr(shape.t_cancel, 0, delta)
     shape.t_hovering = appr(shape.t_hovering, 0, delta)
 
-    for (let i = 0; i < shape.tiles.length; i++) {
-        let tile = shape.tiles[i]
-        if (shape.t_hovering > 0) {
-            tile[4] = t % 600 < 300 ? tile[0] : tile[2]
-            tile[5] = t % 600 < 300 ? tile[1] : tile[3]
+    for (let i = 0; i < shape.dd_tiles.length; i++) {
+        let tile = shape.dd_tiles[i]
+        if (!tile) {
+            continue
         }
-    }
+        if (shape.t_hovering > 0) {
+            tile.off_pos = t % 600 < 300 ? undefined : [1, 1]
+            tile.off_pos = t % 600 < 300 ? undefined : [1, 1]
+        }
 
-    if (shape.t_cancel > 0) {
-        shape.pos[2] = lerp(shape.pos[2], shape.pos[0], ease(1 - shape.t_cancel / 200))
-        shape.pos[3] = lerp(shape.pos[3], shape.pos[1], ease(1 - shape.t_cancel / 200))
+        if (shape.t_cancel > 0) {
+            tile.pos[0] = lerp(tile.pos[0], tile.shape_pos[0] + tile.shape_pos[2], ease(1 - shape.t_cancel / 200))
+            tile.pos[1] = lerp(tile.pos[1], tile.shape_pos[1] + tile.shape_pos[3], ease(1 - shape.t_cancel / 200))
+        }
+
     }
 
     if (shape.t_commit > 0) {
+        /*
         shape.pos[2] = lerp(shape.pos[2], shape.pos[0], ease(1 - shape.t_commit / 200))
         shape.pos[3] = lerp(shape.pos[3], shape.pos[1], ease(1 - shape.t_commit / 200))
+        */
     }
-
-
 
 }
 
@@ -472,8 +511,8 @@ function box_intersect_ratio(a: XYWH, b: XYWH) {
 }
 
 
-function tile_box(shape: Shape, xywh: XYWHZZ): XYWH {
-    return [shape.pos[2] + xywh[0] + 2, shape.pos[3] + xywh[1] + 2, 12, 12]
+function dd_tile_box(dd_tile: DdTile): XYWH {
+    return [dd_tile.pos[0] + 2, dd_tile.pos[1] + 2, 12, 12]
 }
 
 function cursor_box(xy: XY): XYWH {
@@ -522,9 +561,9 @@ export function _render(_alpha: number) {
         }
     }
 
-    for (let slot = 0; slot < fg_shapes.length; slot++) {
-        if (fg_shapes[slot] !== drag_shape) {
-            render_shape(fg_shapes[slot])
+    for (let slot = 0; slot < dd_shapes.length; slot++) {
+        if (dd_shapes[slot] !== drag_shape) {
+            render_shape(dd_shapes[slot])
         }
     }
 
@@ -555,73 +594,27 @@ export function _render(_alpha: number) {
 
 
 
-function render_shape(shape: Shape) {
+function render_shape(shape: DdShape) {
+    let dd_tiles = shape.dd_tiles
 
-    const off_commit: XY[] = [[5, 0], [5, 0], [5, 0], [5, 0]]
 
-
-    let tiles = shape.tiles
-
-    for (let i = 0; i < 2; i++) {
-        for (let j = 0; j < 2; j++) {
-            if (shape.shape[i + j * 2] === 0) {
-                continue
-            }
-            let [ox, oy] = [i * 14, j * 13]
-            let [hx, hy] = [shape.pos[2], shape.pos[3]]
-            hx += ox
-            hy += oy
-
-            if (shape.t_commit !== 0) {
-                c.image(hx + tiles[i][0] + off_commit[i + j * 2][0], hy + tiles[i][1] + off_commit[i + j * 2][1], 16, 16, 0, 0)
-            } else if (shape.t_hovering > 0) {
-                c.image(hx + tiles[i][4], hy + tiles[i][5], 16, 16, 0, 0)
-                c.image(hx + tiles[i][4], hy + tiles[i][5], 16, 16, ...auto_tile_src(tiles, i))
-            } else {
-                c.image(hx + tiles[i][0], hy + tiles[i][1], 16, 16, 0, 0)
-            }
-
-            //c.rect(...tile_box(tiles[i]), 'red')
+    for (let tile of dd_tiles) {
+        if (!tile) {
+            continue
         }
+        let [x, y] = tile.pos
+        let [ox, oy] = tile.off_pos ?? [0, 0]
+        x += ox
+        y += oy
+        if (shape.t_hovering > 0) {
+            c.image(x,  y, 16, 16, 0, 0)
+            //c.image(x, y, 16, 16, ...auto_tile_src(tiles, i))
+        } else {
+            c.image(x, y, 16, 16, 0, 0)
+        }
+
+        //c.rect(...tile_box(tiles[i]), 'red')
     }
-}
-
-function auto_tile_src(tiles: XYWHZZ[], i: number): XY {
-    const auto_tiles: Record<string, XY> = {
-        'left_top': [16, 32],
-        'left_bottom': [16, 16],
-        'right_top': [0, 32],
-        'right_bottom': [0, 16],
-    }
-
-    let [x, y] = [tiles[i][0], tiles[i][1]]
-
-
-    let [left_x, right_x] = [x - 14, x + 14]
-    let [top_y, bottom_y] = [y - 13, y + 13]
-
-    let left = tiles.find(_ => _[0] === left_x && _[1] === y)
-    let right = tiles.find(_ => _[0] === right_x && _[1] === y)
-    let top = tiles.find(_ => _[0] === x && _[1] === top_y)
-    let bottom = tiles.find(_ => _[0] === x && _[1] === bottom_y)
-
-    if (left && top) {
-        return auto_tiles['left_top']
-    }
-
-    if (right && top) {
-        return auto_tiles['right_top']
-    }
-
-    if (left && bottom) {
-        return auto_tiles['left_bottom']
-    }
-
-    if (right && bottom) {
-        return auto_tiles['right_bottom']
-    }
-
-    return [0, 0]
 }
 
 export function appr(value: number, target: number, by: number): number {
