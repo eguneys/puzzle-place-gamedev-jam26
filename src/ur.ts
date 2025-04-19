@@ -31,6 +31,9 @@ function DragHandler() {
 
     let is_down: XY | undefined
 
+    let is_up: XY | undefined
+
+
     function scale_e(e: XY): XY {
         return [e[0] * 160, e[1] * 90]
     }
@@ -62,6 +65,9 @@ function DragHandler() {
         },
         get is_down() {
             return is_down
+        },
+        get is_up() {
+            return is_up
         }
     }
 }
@@ -187,14 +193,21 @@ export function _update(delta: number) {
         }
     } else {
         if (drag_shape) {
-            cancel_drag(drag_shape)
+            let is_committed = commit_drag(drag_shape)
+            if (!is_committed) {
+                cancel_drag(drag_shape)
+            }
             drag_shape = undefined
         }
     }
 
     fg_shapes.forEach(shape => update_shape(shape, delta))
 
-    fg_tiles.forEach(_ => _[2] = 0)
+    fg_tiles.forEach(_ => {
+        if (_[2] === 1) {
+            _[2] = 0
+        }
+    })
 
     if (drag_shape) {
         const shape = drag_shape
@@ -203,7 +216,7 @@ export function _update(delta: number) {
             let min_ratio: number | undefined
             fg_tiles.forEach((fg_tile) => {
                 let ratio = box_intersect_ratio(tile_box(shape, tile), fg_box(fg_tile)).ratio_b
-                if (fg_tile !== min_fg_tile && ratio > 0 && (min_ratio === undefined || ratio > min_ratio)) {
+                if (fg_tile[2] === 0 && ratio > 0 && (min_ratio === undefined || ratio > min_ratio)) {
                     min_fg_tile = fg_tile
                     min_ratio = ratio
                 }
@@ -223,6 +236,17 @@ function cancel_drag(shape: Shape) {
     shape.pos[2] = shape.pos[0]
     shape.pos[3] = shape.pos[1]
     drag_decay = [0, 0]
+}
+
+function commit_drag(shape: Shape) {
+    let pp = fg_tiles.filter(_ => _[2] === 1)
+    if (pp.length !== shape.tiles.length) {
+        return false
+    }
+    pp.forEach(_ => _[2] = 2)
+    fg_shapes.splice(fg_shapes.indexOf(shape), 1)
+    drag_decay = [0, 0]
+    return true
 }
 
 function update_shape(shape: Shape, delta: number) {
@@ -307,7 +331,9 @@ export function _render(_alpha: number) {
 
 
     for (let i = 0; i < fg_tiles.length; i++) {
-        if (fg_tiles[i][2] === 1) {
+        if (fg_tiles[i][2] === 2) {
+            c.image(fg_tiles[i][0], fg_tiles[i][1], 24, 16, 56, 16)
+        } else if (fg_tiles[i][2] === 1) {
             c.image(fg_tiles[i][0], fg_tiles[i][1], 24, 16, 56, 16)
         } else {
             c.image(fg_tiles[i][0], fg_tiles[i][1], 24, 16, 56, 0)
