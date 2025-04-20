@@ -152,7 +152,7 @@ let o: XYWH = [1, 1, 1, 1]
 let s: XYWH = [1, 1, 1, 0]
 let s2: XYWH = [1, 1, 0, 1]
 let s3: XYWH = [1, 0, 1, 1]
-//let s4: XYWH = [0, 1, 1, 1]
+let s4: XYWH = [0, 1, 1, 1]
 let l1: XYWH = [0, 1, 0, 0]
 
 
@@ -191,6 +191,7 @@ function _restart_level() {
     }
     fg_tiles.shift()
 
+    push_tile(0, s4)
     push_tile(1, s)
     push_tile(2, o)
     push_tile(3, s3)
@@ -411,9 +412,11 @@ function commit_drag(shape: DdShape) {
 
     commited_shape = shape
     commited_shape.t_commit = 200
+    commited_fg_box = pp[0].xywh
     drag_decay = [[0, 0], [0, 0], [0, 0], [0, 0]]
     return true
 }
+let commited_fg_box: XYWH | undefined
 
 function update_shape(shape: DdShape, delta: number) {
 
@@ -433,14 +436,16 @@ function update_shape(shape: DdShape, delta: number) {
     shape.t_cancel = appr(shape.t_cancel, 0, delta)
     shape.t_hovering = appr(shape.t_hovering, 0, delta)
 
+    const off_tiles: XY[] = [[1, 1], [-1, 1], [1, -1], [-1, -1]]
+
+    const off_commit_tiles: XY[] = [[4, 0], [8, 0], [4, 2], [8, 2]]
     for (let i = 0; i < shape.dd_tiles.length; i++) {
         let tile = shape.dd_tiles[i]
         if (!tile) {
             continue
         }
         if (shape.t_hovering > 0) {
-            tile.off_pos = t % 600 < 300 ? undefined : [1, 1]
-            tile.off_pos = t % 600 < 300 ? undefined : [1, 1]
+            tile.off_pos = t % 600 < 300 ? undefined : off_tiles[i]
         }
 
         if (shape.t_cancel > 0) {
@@ -448,15 +453,12 @@ function update_shape(shape: DdShape, delta: number) {
             tile.pos[1] = lerp(tile.pos[1], tile.shape_pos[1] + tile.shape_pos[3], ease(1 - shape.t_cancel / 200))
         }
 
-    }
+        if (shape.t_commit > 0) {
+            tile.pos[0] = lerp(tile.pos[0], commited_fg_box![0] + tile.shape_pos[2] + 0 * off_commit_tiles[i][0], ease(1 - shape.t_commit / 200))
+            tile.pos[1] = lerp(tile.pos[1], commited_fg_box![1] + tile.shape_pos[3] + 0 * off_commit_tiles[i][1], ease(1 - shape.t_commit / 200))
+        }
 
-    if (shape.t_commit > 0) {
-        /*
-        shape.pos[2] = lerp(shape.pos[2], shape.pos[0], ease(1 - shape.t_commit / 200))
-        shape.pos[3] = lerp(shape.pos[3], shape.pos[1], ease(1 - shape.t_commit / 200))
-        */
     }
-
 }
 
 function ease(t: number): number {
