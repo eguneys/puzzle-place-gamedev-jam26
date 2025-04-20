@@ -19,6 +19,8 @@ function AudioContent() {
     async function load() {
         buffers['drag'] = await load_audio(ctx, '/audio/drag.wav')
         buffers['drop'] = await load_audio(ctx, '/audio/drop.wav')
+        buffers['drop2'] = await load_audio(ctx, '/audio/drop2.wav')
+        buffers['win'] = await load_audio(ctx, '/audio/win.wav')
     }
 
     function play(music: string, loop: boolean = false, volume: number = 1) {

@@ -14,6 +14,7 @@ type FgTile = {
     is_filled: boolean
     hover_color: HoverColor
     xywh: XYWH
+    ox: XY
 }
 
 let fg_tiles: FgTile[]
@@ -194,7 +195,7 @@ function _restart_level() {
 
     for (let i = 0; i < 5; i++) {
         for (let j = 0; j < 5; j++) {
-            fg_tiles.push({ is_filled: false, hover_color: 0, xywh: [i * 17, 15 + j * 15, 0, 0] })
+            fg_tiles.push({ is_filled: false, hover_color: 0, xywh: [i * 17, 15 + j * 15, 0, 0], ox: [0, 0] })
         }
     }
     fg_tiles.shift()
@@ -274,6 +275,36 @@ export function _update(delta: number) {
         }
     }
 
+    t_drop_shake = appr(t_drop_shake, 0, delta)
+
+    for (let i = 0; i < fg_tiles.length; i++) {
+        if (!fg_tiles[i].is_filled) {
+            continue
+        }
+        if (t_drop_shake > 0) {
+
+            let t = 1 - t_drop_shake / 200 + i / fg_tiles.length * 0.2 + Math.random() * 0.2
+            const shakeX =
+                Math.sin(t * Math.PI * 8) * (1 - t) * 0.5 + // Primary shake
+                Math.sin(t * Math.PI * 24) * (1 - t) * 0.2 + // High frequency jiggle
+                Math.sin(t * Math.PI * 3) * (1 - t) * 0.3; // Slow wobble
+
+            const shakeY =
+                Math.cos(t * Math.PI * 7.5) * (1 - t) * 0.5 + // Slightly offset from X for organic feel
+                Math.sin(t * Math.PI * 22) * (1 - t) * 0.15 + // Tiny high frequency
+                Math.cos(t * Math.PI * 2.8) * (1 - t) * 0.25; // Slow wobble
+
+            // Easing function to make it start fast and slow down
+            const easeOut = 1 - Math.pow(1 - t, 3);
+
+            console.log(shakeX)
+            fg_tiles[i].ox[0] = shakeX * 2 * easeOut
+            fg_tiles[i].ox[1] = shakeY * 2 * easeOut
+        } else {
+            fg_tiles[i].ox = [0, 0]
+        }
+    }
+
     hover_shape = undefined
     if (drag.is_hovering) {
         let { is_hovering } = drag
@@ -344,6 +375,7 @@ export function _update(delta: number) {
 
             if (dd_shapes.length === 0) {
                 t_win = 2000
+                AudioContent.play('win', false, 0.5)
             }
         }
     }
@@ -432,6 +464,7 @@ function cancel_drag(shape: DdShape) {
 }
 
 let commited_shape: DdShape | undefined
+let t_drop_shake = 0
 
 function commit_drag(shape: DdShape) {
     let pp = fg_tiles.filter(_ => _.is_filled === false && _.hover_color === 1)
@@ -445,6 +478,11 @@ function commit_drag(shape: DdShape) {
     commited_shape.t_commit = 200
     commited_fg_box = pp[0].xywh
     drag_decay = [[0, 0], [0, 0], [0, 0], [0, 0]]
+
+    AudioContent.play('drop2', false, 0.5)
+
+    t_drop_shake = 200
+
     return true
 }
 let commited_fg_box: XYWH | undefined
@@ -568,6 +606,9 @@ export function _render(_alpha: number) {
 
     for (let i = 0; i < fg_tiles.length; i++) {
         let [x, y, w, h] = fg_tiles[i].xywh
+        let [ox, oy] = fg_tiles[i].ox
+        x += ox
+        y += oy
         if (fg_tiles[i].is_filled) {
             if (fg_tiles[i].hover_color === 2) {
                 c.image(x, y, 24, 16, 56, 32)
