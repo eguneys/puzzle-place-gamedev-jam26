@@ -19,6 +19,7 @@ type FgTile = {
 let fg_tiles: FgTile[]
 
 type DdTile = {
+    is_filled: boolean
     shape_pos: XYWH
     off_pos?: XY
     pos: XY
@@ -26,14 +27,11 @@ type DdTile = {
 
 type DdShape = {
     slot: number
-    dd_tiles: (DdTile | undefined)[]
-    shape: ShapeMesh
+    dd_tiles: DdTile[]
     t_hovering: number
     t_cancel: number
     t_commit: number
 }
-
-type ShapeMesh = XYWH
 
 let dd_shapes: DdShape[]
 
@@ -212,14 +210,14 @@ function push_tile(slot: number, l: XYWH) {
 
     for (let i = 0; i < 2; i++) {
         for (let j = 0; j < 2; j++) {
-            if (l[i + j * 2] === 1) {
-                let x = i * 14
-                let y = j * 13
+            let is_filled = l[i + j * 2] === 1
+            let x = i * 14
+            let y = j * 13
 
-                dd_tiles[i + j * 2] = { 
-                    shape_pos: [pp[slot][0], pp[slot][1], x, y],
-                    pos: [pp[slot][0] + x, pp[slot][1] + y],
-                }
+            dd_tiles[i + j * 2] = {
+                is_filled,
+                shape_pos: [pp[slot][0], pp[slot][1], x, y],
+                pos: [pp[slot][0] + x, pp[slot][1] + y],
             }
         }
     }
@@ -227,7 +225,6 @@ function push_tile(slot: number, l: XYWH) {
     dd_shapes.push({
         dd_tiles,
         slot,
-        shape: l,
         t_hovering: 0,
         t_cancel: 0,
         t_commit: 0
@@ -356,10 +353,9 @@ export function _update(delta: number) {
 
             let [x, y] = [Math.floor(i / 5), i % 5]
 
-            let off_i = shape.dd_tiles.findIndex(_ => _ !== undefined)
             let tiles = shape.dd_tiles.map((_, i) =>
-                _ &&
-            fg_tiles[y + Math.floor((i - off_i) / 2) + (x + (i - off_i) % 2) * 5 - 1]).filter(Boolean)
+                _.is_filled && 
+                fg_tiles[y + Math.floor((i) / 2) + (x + (i) % 2) * 5 - 1]).filter(Boolean)
             let all_empty = tiles.every(_ => !_ || (_.is_filled === false))
 
             if (all_empty) {
@@ -404,7 +400,7 @@ let commited_shape: DdShape | undefined
 
 function commit_drag(shape: DdShape) {
     let pp = fg_tiles.filter(_ => _.is_filled === false && _.hover_color === 1)
-    if (pp.length !== shape.dd_tiles.filter(Boolean).length) {
+    if (pp.length !== shape.dd_tiles.filter(_ => _.is_filled).length) {
         return false
     }
     pp.forEach(_ => _.is_filled = true)
@@ -454,8 +450,8 @@ function update_shape(shape: DdShape, delta: number) {
         }
 
         if (shape.t_commit > 0) {
-            tile.pos[0] = lerp(tile.pos[0], commited_fg_box![0] + tile.shape_pos[2] + 0 * off_commit_tiles[i][0], ease(1 - shape.t_commit / 200))
-            tile.pos[1] = lerp(tile.pos[1], commited_fg_box![1] + tile.shape_pos[3] + 0 * off_commit_tiles[i][1], ease(1 - shape.t_commit / 200))
+            //tile.pos[0] = lerp(tile.pos[0], commited_fg_box![0] + tile.shape_pos[2] + 0 * off_commit_tiles[i][0], ease(1 - shape.t_commit / 200))
+            //tile.pos[1] = lerp(tile.pos[1], commited_fg_box![1] + tile.shape_pos[3] + 0 * off_commit_tiles[i][1], ease(1 - shape.t_commit / 200))
         }
 
     }
@@ -599,9 +595,12 @@ export function _render(_alpha: number) {
 function render_shape(shape: DdShape) {
     let dd_tiles = shape.dd_tiles
 
+    if (shape.t_commit % 200 > 100) {
+        return
+    }
 
     for (let tile of dd_tiles) {
-        if (!tile) {
+        if (!tile.is_filled) {
             continue
         }
         let [x, y] = tile.pos
