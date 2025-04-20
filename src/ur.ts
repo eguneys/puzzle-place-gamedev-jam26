@@ -131,6 +131,7 @@ function DragHandler() {
 const button_boxes: Record<string, XYWH> = {
     back: [0, 0, 24, 16],
     restart: [0, 0, 24, 16],
+    next: [96, 15, 30, 80]
 }
 
 let drag: DragHandler
@@ -138,6 +139,10 @@ let drag: DragHandler
 let t: number
 
 let t_restart: number
+
+let t_win: number
+
+let is_has_next: boolean
 
 let bg_speed: number
 
@@ -154,6 +159,7 @@ let s4: XYWH = [0, 1, 1, 1]
 let l1: XYWH = [0, 1, 0, 0]
 
 
+let is_hovering_next = false
 
 export function _init() {
 
@@ -167,6 +173,10 @@ export function _init() {
 function _restart_level() {
 
     t_restart = 0
+
+    t_win = 0
+
+    is_has_next = false
 
     drag_decay = [[0, 0], [0, 0], [0, 0], [0, 0]]
 
@@ -231,8 +241,14 @@ function push_tile(slot: number, l: XYWH) {
     })
 }
 
+
 export function _update(delta: number) {
     
+    if (t_win > 0) {
+        is_has_next = true
+    }
+    t_win = appr(t_win, 0, delta)
+
     if (t_restart > 0) {
         t_restart = appr(t_restart, 0, delta)
         if (t_restart === 0) {
@@ -325,6 +341,10 @@ export function _update(delta: number) {
                 cancel_drag(drag_shape)
             }
             drag_shape = undefined
+
+            if (dd_shapes.length === 0) {
+                t_win = 2000
+            }
         }
     }
 
@@ -378,6 +398,21 @@ export function _update(delta: number) {
             t_restart = 200
         }
     }
+
+        if (t_win === 0 && is_has_next) {
+            if (drag.is_hovering) {
+                if (box_intersect(cursor_box(drag.is_hovering), button_box(button_boxes.next))) {
+                    is_hovering_next = true
+                } else {
+                    is_hovering_next = false
+                }
+            }
+            if (drag.is_just_down) {
+                if (box_intersect(cursor_box(drag.is_just_down), button_box(button_boxes.next))) {
+                    t_restart = 200
+                }
+            }
+        }
 
     drag.update(delta)
 }
@@ -442,6 +477,8 @@ function update_shape(shape: DdShape, delta: number) {
         }
         if (shape.t_hovering > 0) {
             tile.off_pos = t % 600 < 300 ? undefined : off_tiles[i]
+        } else {
+            tile.off_pos = [0, 0]
         }
 
         if (shape.t_cancel > 0) {
@@ -576,6 +613,23 @@ export function _render(_alpha: number) {
     if (commited_shape) {
         render_shape(commited_shape)
     }
+
+
+    if (is_has_next) {
+        let ty = ease(t_win / 400) * 90
+        let ty2 = -90 + (1 - ease(t_win / 600)) * 90
+        c.image(50, ty, 14, 90, 136, 0)
+        c.image(64, ty2, 40, 90, 150, 0)
+
+        if (t_win === 0) {
+            if (!is_hovering_next) {
+                c.image(...button_boxes.next, 192, 0)
+            } else {
+                c.image(...button_boxes.next, 228, 0)
+            }
+        }
+    }
+
 
     if (drag.is_hovering) {
         if (drag_shape) {
