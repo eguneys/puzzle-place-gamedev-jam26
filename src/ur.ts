@@ -248,6 +248,10 @@ scc..
 ]
 
 let level = levels.length - 1
+level = 0
+
+
+let music_playing = false
 
 function _restart_level() {
 
@@ -431,7 +435,6 @@ export function _update(delta: number) {
     hover_shape = undefined
     if (drag.is_hovering) {
         let { is_hovering } = drag
-
         if (drag_shape) {
 
             drag_shape.t_hovering = 120
@@ -462,6 +465,13 @@ export function _update(delta: number) {
 
         let dd_shape
         let dd_tile
+        if (!music_playing) {
+
+            music_playing = true
+            AudioContent.play('song_bard', true, 0.1)
+        }
+
+
         
         for (let shape of dd_shapes) {
             for (let tile of shape.dd_tiles) {

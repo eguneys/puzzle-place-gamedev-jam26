@@ -21,6 +21,7 @@ function AudioContent() {
         buffers['drop'] = await load_audio(ctx, '/audio/drop.wav')
         buffers['drop2'] = await load_audio(ctx, '/audio/drop2.wav')
         buffers['win'] = await load_audio(ctx, '/audio/win.wav')
+        buffers['song_bard'] = await load_audio(ctx, '/audio/song_bard_gamedev_26_last.mp3')
     }
 
     function play(music: string, loop: boolean = false, volume: number = 1) {

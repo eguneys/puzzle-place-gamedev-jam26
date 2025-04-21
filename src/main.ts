@@ -17,7 +17,6 @@ async function load_font(font_family: string, url: string, props = {
 
 function app(el: HTMLElement) {
 
-  _init()
 
   Loop(_update, _render)
 
@@ -27,6 +26,7 @@ function app(el: HTMLElement) {
     load_font('HDLoreFont', '/PTSerif-Regular.ttf')
   ]).then(() => {
 
+  _init()
   })
 
   c.canvas.classList.add('pixelated')
