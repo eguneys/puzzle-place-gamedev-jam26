@@ -11,6 +11,7 @@ let bg_tiles: XY[]
 type HoverColor = 0 | 1 | 2
 
 type FgTile = {
+    is_hidden: boolean
     is_filled: boolean
     hover_color: HoverColor
     xywh: XYWH
@@ -158,6 +159,7 @@ let s2: XYWH = [1, 1, 0, 1]
 let s3: XYWH = [1, 0, 1, 1]
 let s4: XYWH = [0, 1, 1, 1]
 let l1: XYWH = [0, 1, 0, 0]
+let x1: XYWH = [0, 1, 1, 0]
 
 
 let is_hovering_next = false
@@ -170,6 +172,82 @@ export function _init() {
     _restart_level()
 
 }
+
+
+let levels = [
+    `
+.....
+.....
+..1a.
+..aa.
+.....
+`,
+    `
+.....
+.2b..
+.b1a.
+..aa.
+.....
+`,
+    `
+.2b3a
+.b..a
+.4..5
+.ccaa
+.....
+`,
+    `
+.2b3a
+.b1da
+.4dd5
+.ccaa
+.....
+`,
+    `
+.2a..
+.a3a.
+...a5
+...bb
+.....
+`,
+    `
+.....
+.2o..
+.o8..
+...1o
+...oo
+`,
+    `
+.....
+..82c
+.1oc.
+.oo5.
+..cc.
+`,
+    `
+...4.
+..8oo
+.82c.
+1oc..
+oo...
+`,
+    `
+.....
+...6.
+..a..
+.6.1a
+a..aa
+`,
+    `
+.....
+...68
+c2s1o
+c65oo
+scc..
+`,
+]
+
+let level = levels.length - 1
 
 function _restart_level() {
 
@@ -193,19 +271,64 @@ function _restart_level() {
         }
     }
 
+
+    load_level(level)
+
+}
+
+let t_thanks = 0
+function load_level(nb: number) {
+
+    if (nb > levels.length - 1) {
+        t_thanks = 2000
+        return
+    }
+
+    let level = levels[nb]
+    let level_lines = level.trim().split('\n').map(_ => _.trim().split(''))
     for (let i = 0; i < 5; i++) {
         for (let j = 0; j < 5; j++) {
-            fg_tiles.push({ is_filled: false, hover_color: 0, xywh: [i * 17, 15 + j * 15, 0, 0], ox: [0, 0] })
+            let line = level_lines[j]
+            let char = line[i]
+            fg_tiles.push({ is_hidden: char === '.', is_filled: false, hover_color: 0, xywh: [i * 17, 15 + j * 15, 0, 0], ox: [0, 0] })
         }
     }
     fg_tiles.shift()
 
-    push_tile(0, s4)
-    push_tile(1, s)
-    push_tile(2, o)
-    push_tile(3, s3)
-    push_tile(4, s2)
-    push_tile(5, l1)
+
+    let k = 0
+    arr_shuffle(level_lines)
+    level_lines.forEach((line) => {
+
+        arr_shuffle(line)
+        line.forEach((char) => {
+
+            if (char === '1') {
+                push_tile(k++, o)
+
+            }
+            if (char === '2') {
+                push_tile(k++, s)
+            }
+            if (char === '3') {
+                push_tile(k++, s2)
+
+            }
+            if (char === '4') {
+                push_tile(k++, s3)
+            }
+            if (char === '5') {
+                push_tile(k++, s4)
+            }
+            if (char === '8') {
+                push_tile(k++, l1)
+            }
+            if (char === '6') {
+                push_tile(k++, x1)
+            }
+
+        })
+    })
 }
 
 function push_tile(slot: number, l: XYWH) {
@@ -441,6 +564,7 @@ export function _update(delta: number) {
             }
             if (drag.is_just_down) {
                 if (box_intersect(cursor_box(drag.is_just_down), button_box(button_boxes.next))) {
+                    level++
                     t_restart = 200
                 }
             }
@@ -467,7 +591,7 @@ let commited_shape: DdShape | undefined
 let t_drop_shake = 0
 
 function commit_drag(shape: DdShape) {
-    let pp = fg_tiles.filter(_ => _.is_filled === false && _.hover_color === 1)
+    let pp = fg_tiles.filter(_ => !_.is_hidden && _.is_filled === false && _.hover_color === 1)
     if (pp.length !== shape.dd_tiles.filter(_ => _.is_filled).length) {
         return false
     }
@@ -605,6 +729,9 @@ export function _render(_alpha: number) {
 
 
     for (let i = 0; i < fg_tiles.length; i++) {
+        if (fg_tiles[i].is_hidden) {
+            continue
+        }
         let [x, y, w, h] = fg_tiles[i].xywh
         let [ox, oy] = fg_tiles[i].ox
         x += ox
@@ -724,4 +851,10 @@ export function appr(value: number, target: number, by: number): number {
 
 export function lerp(a: number, b: number, t: number): number {
     return a + (b - a) * t
+}
+
+/* https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array */
+export function arr_shuffle<A>(a: Array<A>, rng = () => Math.random(), b = 0, c = 0, d = 0) {
+  c=a.length;while(c)b=rng()*c--|0,d=a[c],a[c]=a[b],a[b]=d;
+  return a
 }
