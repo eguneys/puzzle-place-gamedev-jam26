@@ -162,10 +162,13 @@ let l1: XYWH = [0, 1, 0, 0]
 let x1: XYWH = [0, 1, 1, 0]
 
 
-let is_hovering_next = false
+let is_hovering_next: boolean
 
 export function _init() {
+    is_hovering_next = false
 
+    t_thanks = 0
+    level = 0
     t = 0
     bg_speed = 0
 
@@ -248,7 +251,6 @@ scc..
 ]
 
 let level = levels.length - 1
-level = 0
 
 
 let music_playing = false
@@ -280,7 +282,7 @@ function _restart_level() {
 
 }
 
-let t_thanks = 0
+let t_thanks: number
 function load_level(nb: number) {
 
     if (nb > levels.length - 1) {
@@ -560,6 +562,9 @@ export function _update(delta: number) {
 
     if (drag.is_just_down) {
         if (box_intersect(cursor_box(drag.is_just_down), button_box(button_boxes.restart))) {
+            if (t_thanks > 0) {
+                _init()
+            }
             t_restart = 200
         }
     }
@@ -819,6 +824,9 @@ export function _render(_alpha: number) {
         }
     }
 
+    if (t_thanks > 0) {
+    c.image(20, 0, 160, 80, 32, 96)
+    }
 
 }
 
