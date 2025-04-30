@@ -18,15 +18,16 @@ async function load_font(font_family: string, url: string, props = {
 function app(el: HTMLElement) {
 
 
-  Loop(_update, _render)
 
   Promise.all([
     c.load_sheet(),
     AudioContent.load(),
-    load_font('HDLoreFont', '/PTSerif-Regular.ttf')
+    load_font('HDLoreFont', './PTSerif-Regular.ttf')
   ]).then(() => {
 
-  _init()
+    _init()
+
+    Loop(_update, _render)
   })
 
   c.canvas.classList.add('pixelated')

@@ -615,7 +615,6 @@ function commit_drag(shape: DdShape) {
 
     commited_shape = shape
     commited_shape.t_commit = 200
-    commited_fg_box = pp[0].xywh
     drag_decay = [[0, 0], [0, 0], [0, 0], [0, 0]]
 
     AudioContent.play('drop2', false, 0.5)
@@ -624,7 +623,6 @@ function commit_drag(shape: DdShape) {
 
     return true
 }
-let commited_fg_box: XYWH | undefined
 
 function update_shape(shape: DdShape, delta: number) {
 
@@ -646,7 +644,6 @@ function update_shape(shape: DdShape, delta: number) {
 
     const off_tiles: XY[] = [[1, 1], [-1, 1], [1, -1], [-1, -1]]
 
-    const off_commit_tiles: XY[] = [[4, 0], [8, 0], [4, 2], [8, 2]]
     for (let i = 0; i < shape.dd_tiles.length; i++) {
         let tile = shape.dd_tiles[i]
         if (!tile) {
@@ -872,7 +869,7 @@ export function lerp(a: number, b: number, t: number): number {
 }
 
 /* https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array */
-export function arr_shuffle<A>(a: Array<A>, rng = () => Math.random(), b = 0, c = 0, d = 0) {
+export function arr_shuffle<A>(a: Array<A>, rng = () => Math.random(), b = 0, c = 0, d?: A) {
   c=a.length;while(c)b=rng()*c--|0,d=a[c],a[c]=a[b],a[b]=d;
   return a
 }
